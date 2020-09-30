@@ -20,6 +20,10 @@ var (
 		"Add a checksum (or, if decoding, expect and check a checksum)")
 	version = pflag.Int8P("-version", "v", 0,
 		"Use the given version byte when encoding with checksum")
+	hex = pflag.BoolP("-hex", "x", false,
+		"Expect hexadecimal input (or, if decoding, produce hexadecimal output")
+
+	InvalidInputErr = fmt.Errorf("invalid input")
 )
 
 func decodeAll(r io.Reader, w io.Writer, check bool) error {
@@ -63,11 +67,20 @@ func encodeAll(r io.Reader, w io.Writer, check bool, version int8) error {
 func main() {
 	pflag.Parse()
 
+	var input io.Reader = os.Stdin
+	var output io.Writer = os.Stdout
+
 	var err error
 	if *decoding {
-		err = decodeAll(os.Stdin, os.Stdout, *check)
+		if *hex {
+			output = toHex(output)
+		}
+		err = decodeAll(input, output, *check)
 	} else {
-		err = encodeAll(os.Stdin, os.Stdout, *check, *version)
+		if *hex {
+			input = fromHex(input)
+		}
+		err = encodeAll(input, output, *check, *version)
 	}
 	if err != nil {
 		_, err = fmt.Fprintf(os.Stderr, "error: %v\n", err)
