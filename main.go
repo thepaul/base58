@@ -4,9 +4,9 @@ package main
 
 import (
 	"bufio"
+	"encoding/hex"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 
 	"github.com/btcsuite/btcutil/base58"
@@ -20,20 +20,17 @@ var (
 		"Add a checksum (or, if decoding, expect and check a checksum)")
 	version = pflag.Int8P("-version", "v", 0,
 		"Use the given version byte when encoding with checksum")
-	hex = pflag.BoolP("-hex", "x", false,
+	useHex = pflag.BoolP("-hex", "x", false,
 		"Expect hexadecimal input (or, if decoding, produce hexadecimal output")
-
-	InvalidInputErr = fmt.Errorf("invalid input")
 )
 
-func decodeAll(r io.Reader, w io.Writer, check bool) error {
+func decodeAllFromBase58(r io.Reader, w io.Writer, check, useHex bool) (err error) {
 	scanner := bufio.NewScanner(r)
 	scanner.Split(bufio.ScanWords)
 	for scanner.Scan() {
 		word := scanner.Text()
 		var result []byte
 		if check {
-			var err error
 			result, _, err = base58.CheckDecode(word)
 			if err != nil {
 				return err
@@ -41,7 +38,11 @@ func decodeAll(r io.Reader, w io.Writer, check bool) error {
 		} else {
 			result = base58.Decode(word)
 		}
-		_, err := w.Write(result)
+		if useHex {
+			_, err = fmt.Fprintf(w, "%x\n", result)
+		} else {
+			_, err = w.Write(result)
+		}
 		if err != nil {
 			return err
 		}
@@ -49,8 +50,8 @@ func decodeAll(r io.Reader, w io.Writer, check bool) error {
 	return scanner.Err()
 }
 
-func encodeAll(r io.Reader, w io.Writer, check bool, version int8) error {
-	data, err := ioutil.ReadAll(r)
+func encodeAllToBase58(r io.Reader, w io.Writer, check bool, version int8) error {
+	data, err := io.ReadAll(r)
 	if err != nil {
 		return err
 	}
@@ -64,6 +65,29 @@ func encodeAll(r io.Reader, w io.Writer, check bool, version int8) error {
 	return err
 }
 
+func encodeAllHexToBase58(r io.Reader, w io.Writer, check bool, version int8) error {
+	scanner := bufio.NewScanner(r)
+	scanner.Split(bufio.ScanWords)
+	for scanner.Scan() {
+		word := scanner.Text()
+		data, err := hex.DecodeString(word)
+		if err != nil {
+			return err
+		}
+		var result []byte
+		if check {
+			result = []byte(base58.CheckEncode(data, byte(version)))
+		} else {
+			result = []byte(base58.Encode(data))
+		}
+		_, err = w.Write(result)
+		if err != nil {
+			return err
+		}
+	}
+	return scanner.Err()
+}
+
 func main() {
 	pflag.Parse()
 
@@ -72,15 +96,13 @@ func main() {
 
 	var err error
 	if *decoding {
-		if *hex {
-			output = toHex(output)
-		}
-		err = decodeAll(input, output, *check)
+		err = decodeAllFromBase58(input, output, *check, *useHex)
 	} else {
-		if *hex {
-			input = fromHex(input)
+		if *useHex {
+			err = encodeAllHexToBase58(input, output, *check, *version)
+		} else {
+			err = encodeAllToBase58(input, output, *check, *version)
 		}
-		err = encodeAll(input, output, *check, *version)
 	}
 	if err != nil {
 		_, err = fmt.Fprintf(os.Stderr, "error: %v\n", err)
