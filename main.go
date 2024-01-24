@@ -21,7 +21,7 @@ var (
 	version = pflag.Int8P("-version", "v", 0,
 		"Use the given version byte when encoding with checksum")
 	useHex = pflag.BoolP("-hex", "x", false,
-		"Expect hexadecimal input (or, if decoding, produce hexadecimal output")
+		"Expect hexadecimal input (or, if decoding, produce hexadecimal output)")
 )
 
 func decodeAllFromBase58(r io.Reader, w io.Writer, check, useHex bool) (err error) {
